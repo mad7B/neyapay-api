@@ -11,8 +11,14 @@ export default async function handler(req, res) {
     return res.status(405).json({ cevap: "Sadece POST isteği kabul edilir." });
   }
 
-  const body = req.body || {};
-  const prompt = body.prompt || "Merhaba";
+  // ----------- EN ÖNEMLİ EK -----------
+  let body = req.body;
+  if (typeof body === "string") {
+    try { body = JSON.parse(body); } catch {}
+  }
+  //--------------------------------------
+
+  const prompt = body?.prompt || "Merhaba";
 
   try {
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
