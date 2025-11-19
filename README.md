@@ -1,1 +1,0 @@
-# neyapay-api
