@@ -1,0 +1,5 @@
+{
+  "routes": [
+    { "src": "/api/zap", "methods": ["POST", "OPTIONS"], "dest": "/api/zap.js" }
+  ]
+}
