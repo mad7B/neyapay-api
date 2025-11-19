@@ -1,10 +1,11 @@
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // CORS – BU KISIM ZORUNLU!
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ cevap: "Sadece POST" });
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ cevap: 'Sadece POST' });
 
   const { prompt } = req.body;
 
@@ -22,7 +23,6 @@ export default async function handler(req, res) {
         max_tokens: 600
       })
     });
-    if (!g.ok) throw new Error();
     const d = await g.json();
     return res.status(200).json({ cevap: d.choices[0].message.content.trim() });
   } catch (e) {
