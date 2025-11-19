@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // CORS Ayarları
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -15,7 +14,7 @@ export default async function handler(req, res) {
   const body = req.body || {};
   const prompt = body.prompt || "Merhaba";
 
-  // *************** 1 - GROQ ***************
+  // *************** 1 — GROQ ***************
   try {
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -26,8 +25,8 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: "qwen/qwen-2.5-72b-instruct",
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.9,
-        max_tokens: 600
+        max_tokens: 600,
+        temperature: 0.9
       })
     });
 
@@ -38,11 +37,11 @@ export default async function handler(req, res) {
         cevap: groqData.choices[0].message.content.trim()
       });
     }
-  } catch (error) {
-    console.log("GROQ ERROR:", error);
+  } catch (e) {
+    console.log("GROQ ERROR:", e);
   }
 
-  // *************** 2 - OPENROUTER FALLBACK (GARANTİ MODEL) ***************
+  // *************** 2 — OPENROUTER FALLBACK ***************
   try {
     const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -53,7 +52,7 @@ export default async function handler(req, res) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "anthropic/claude-3.6-sonnet",
+        model: "meta-llama/llama-3.1-8b-instruct",
         messages: [{ role: "user", content: prompt }]
       })
     });
@@ -66,18 +65,34 @@ export default async function handler(req, res) {
       });
     }
 
-    if (orData?.error?.message) {
+    // Eğer bu model de hata verirse → 2. fallback
+    if (orData?.error) {
+      const nemoResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
+          "HTTP-Referer": "https://neyapay.com.tr",
+          "X-Title": "Neyapay",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "mistralai/mistral-nemo",
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+
+      const nemoData = await nemoResponse.json();
+
       return res.status(200).json({
-        cevap: "Hata: " + orData.error.message
+        cevap: nemoData?.choices?.[0]?.message?.content?.trim() || "Yanıt alınamadı (fallback2)"
       });
     }
 
-    return res.status(200).json({ cevap: "Yanıt alınamadı (OR fallback)." });
-
-  } catch (error2) {
-    console.log("OPENROUTER ERROR:", error2);
-    return res.status(200).json({
-      cevap: "AI şu an meşgul, birazdan tekrar dene."
-    });
+  } catch (e2) {
+    console.log("OR ERROR:", e2);
   }
+
+  return res.status(200).json({
+    cevap: "AI şu an meşgul, tekrar dene."
+  });
 }
