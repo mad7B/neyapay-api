@@ -1,78 +1,73 @@
-import express from "express";
-import fetch from "node-fetch";
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-const app = express();
-app.use(express.json());
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
 
-const OPENROUTER_API_KEY = "SENİN_API_KEYİN";
+  if (req.method !== "POST") {
+    return res.status(405).json({ cevap: "Sadece POST isteği kabul edilir." });
+  }
 
-// 🌟 Her zaman düzgün çalışan ilk tercih model
-const PRIMARY_MODEL = "meta-llama/llama-3.2-3b-instruct";
+  const prompt = req.body?.prompt || "Merhaba";
 
-// 🌟 Birincisi hata verirse devreye giren yedek model
-const FALLBACK_MODEL = "mistralai/mistral-small-latest";
-
-async function generateAnswer(prompt) {
-  const systemPrompt = "Kısa, düzgün, anlamlı ve akıcı Türkçe cevap üret. 3-4 cümleyi geçme.";
-
-  // ---- 1) PRIMARY MODEL ----
-  const primaryResponse = await callModel(PRIMARY_MODEL, prompt, systemPrompt);
-
-  if (primaryResponse.ok) return primaryResponse;
-
-  console.log("⚠ Primary model hata verdi, fallback'e geçiliyor...");
-
-  // ---- 2) FALLBACK MODEL ----
-  return await callModel(FALLBACK_MODEL, prompt, systemPrompt);
-}
-
-async function callModel(model, prompt, systemPrompt) {
+  // 1) GROQ
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const g = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: model,
-        max_tokens: 300,
-        temperature: 0.7,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt }
-        ]
+        model: "qwen/qwen-2.5-72b-instruct",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 600,
+        temperature: 0.8
       })
     });
 
-    const data = await response.json();
+    const j = await g.json();
 
-    if (!data.choices || !data.choices[0]?.message?.content) {
-      return { ok: false, error: "Model response empty" };
+    if (j?.choices?.[0]?.message?.content) {
+      return res.status(200).json({ cevap: j.choices[0].message.content.trim() });
+    }
+  } catch (err) {
+    console.log("GROQ ERROR:", err);
+  }
+
+  // 2) OPENROUTER FALLBACK (her zaman çalışan model)
+  try {
+    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
+        "HTTP-Referer": "https://neyapay.com.tr",
+        "X-Title": "Neyapay",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "deepseek/deepseek-chat",
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+
+    const d = await r.json();
+
+    if (d?.choices?.[0]?.message?.content) {
+      return res.status(200).json({ cevap: d.choices[0].message.content.trim() });
     }
 
-    return {
-      ok: true,
-      text: data.choices[0].message.content.trim()
-    };
-  } catch (err) {
-    return { ok: false, error: err.message };
+    if (d?.error?.message) {
+      return res.status(200).json({ cevap: "Hata: " + d.error.message });
+    }
+  } catch (err2) {
+    console.log("OR ERROR:", err2);
   }
+
+  return res.status(200).json({
+    cevap: "Yanıt alınamadı, birazdan tekrar dene."
+  });
 }
-
-app.post("/api/ask", async (req, res) => {
-  const { prompt } = req.body;
-  if (!prompt) return res.status(400).json({ error: "prompt gerekli" });
-
-  const ai = await generateAnswer(prompt);
-
-  if (!ai.ok) {
-    return res.status(500).json({ error: "AI cevap veremedi", detail: ai.error });
-  }
-
-  res.json({ answer: ai.text });
-});
-
-app.listen(3000, () => {
-  console.log("Server çalışıyor: http://localhost:3000");
-});
