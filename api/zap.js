@@ -1,19 +1,32 @@
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+export const config = {
+  runtime: "edge"
+};
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+export default async function handler(req) {
+  const method = req.method;
+
+  // CORS
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
+  };
+
+  if (method === "OPTIONS") {
+    return new Response(null, { status: 200, headers });
   }
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ cevap: "Sadece POST isteği kabul edilir." });
+  if (method !== "POST") {
+    return new Response(
+      JSON.stringify({ cevap: "Sadece POST isteği kabul edilir." }),
+      { status: 405, headers }
+    );
   }
 
-  const body = req.body || {};
+  const body = await req.json();
   const prompt = body.prompt || "Merhaba";
 
+  // ---- GROQ ----
   try {
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -32,17 +45,16 @@ export default async function handler(req, res) {
     const groqData = await groqResponse.json();
 
     if (groqData?.choices?.[0]?.message?.content) {
-      return res.status(200).json({
-        cevap: groqData.choices[0].message.content.trim()
-      });
+      return new Response(
+        JSON.stringify({ cevap: groqData.choices[0].message.content.trim() }),
+        { status: 200, headers }
+      );
     }
-
-    console.log("GROQ ERROR:", groqData);
-  } catch (error) {
-    console.log("GROQ TRY ERROR:", error);
+  } catch (err) {
+    console.log("GROQ ERROR:", err);
   }
 
-  // FALLBACK OPENROUTER
+  // ---- OPENROUTER FALLBACK ----
   try {
     const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -60,21 +72,29 @@ export default async function handler(req, res) {
 
     const orData = await orResponse.json();
 
-    console.log("OPENROUTER RAW:", orData);
-
     if (orData?.choices?.[0]?.message?.content) {
-      return res.status(200).json({ cevap: orData.choices[0].message.content.trim() });
+      return new Response(
+        JSON.stringify({ cevap: orData.choices[0].message.content.trim() }),
+        { status: 200, headers }
+      );
     }
 
     if (orData?.error?.message) {
-      return res.status(200).json({ cevap: "Hata: " + orData.error.message });
+      return new Response(
+        JSON.stringify({ cevap: "Hata: " + orData.error.message }),
+        { status: 200, headers }
+      );
     }
 
-    return res.status(200).json({ cevap: "Yanıt alınamadı (OR fallback)." });
-  } catch (error2) {
-    console.log("OPENROUTER ERROR:", error2);
-    return res.status(200).json({
-      cevap: "AI şu an meşgul, birazdan tekrar dene."
-    });
+    return new Response(
+      JSON.stringify({ cevap: "Yanıt alınamadı (OR fallback)." }),
+      { status: 200, headers }
+    );
+  } catch (err2) {
+    console.log("OPENROUTER ERROR:", err2);
+    return new Response(
+      JSON.stringify({ cevap: "AI şu an meşgul, birazdan tekrar dene." }),
+      { status: 200, headers }
+    );
   }
 }
