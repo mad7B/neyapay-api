@@ -1,98 +1,78 @@
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+import express from "express";
+import fetch from "node-fetch";
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
+const app = express();
+app.use(express.json());
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ cevap: "Sadece POST isteği kabul edilir." });
-  }
+const OPENROUTER_API_KEY = "SENİN_API_KEYİN";
 
-  const body = req.body || {};
-  const prompt = body.prompt || "Merhaba";
+// 🌟 Her zaman düzgün çalışan ilk tercih model
+const PRIMARY_MODEL = "meta-llama/llama-3.2-3b-instruct";
 
-  // *************** 1 — GROQ ***************
-  try {
-    const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "qwen/qwen-2.5-72b-instruct",
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 600,
-        temperature: 0.9
-      })
-    });
+// 🌟 Birincisi hata verirse devreye giren yedek model
+const FALLBACK_MODEL = "mistralai/mistral-small-latest";
 
-    const groqData = await groqResponse.json();
+async function generateAnswer(prompt) {
+  const systemPrompt = "Kısa, düzgün, anlamlı ve akıcı Türkçe cevap üret. 3-4 cümleyi geçme.";
 
-    if (groqData?.choices?.[0]?.message?.content) {
-      return res.status(200).json({
-        cevap: groqData.choices[0].message.content.trim()
-      });
-    }
-  } catch (e) {
-    console.log("GROQ ERROR:", e);
-  }
+  // ---- 1) PRIMARY MODEL ----
+  const primaryResponse = await callModel(PRIMARY_MODEL, prompt, systemPrompt);
 
-  // *************** 2 — OPENROUTER FALLBACK ***************
-  try {
-    const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-        "HTTP-Referer": "https://neyapay.com.tr",
-        "X-Title": "Neyapay",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "meta-llama/llama-3.1-8b-instruct",
-        messages: [{ role: "user", content: prompt }]
-      })
-    });
+  if (primaryResponse.ok) return primaryResponse;
 
-    const orData = await orResponse.json();
+  console.log("⚠ Primary model hata verdi, fallback'e geçiliyor...");
 
-    if (orData?.choices?.[0]?.message?.content) {
-      return res.status(200).json({
-        cevap: orData.choices[0].message.content.trim()
-      });
-    }
-
-    // Eğer bu model de hata verirse → 2. fallback
-    if (orData?.error) {
-      const nemoResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-          "HTTP-Referer": "https://neyapay.com.tr",
-          "X-Title": "Neyapay",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "mistralai/mistral-nemo",
-          messages: [{ role: "user", content: prompt }]
-        })
-      });
-
-      const nemoData = await nemoResponse.json();
-
-      return res.status(200).json({
-        cevap: nemoData?.choices?.[0]?.message?.content?.trim() || "Yanıt alınamadı (fallback2)"
-      });
-    }
-
-  } catch (e2) {
-    console.log("OR ERROR:", e2);
-  }
-
-  return res.status(200).json({
-    cevap: "AI şu an meşgul, tekrar dene."
-  });
+  // ---- 2) FALLBACK MODEL ----
+  return await callModel(FALLBACK_MODEL, prompt, systemPrompt);
 }
+
+async function callModel(model, prompt, systemPrompt) {
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: model,
+        max_tokens: 300,
+        temperature: 0.7,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt }
+        ]
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.choices || !data.choices[0]?.message?.content) {
+      return { ok: false, error: "Model response empty" };
+    }
+
+    return {
+      ok: true,
+      text: data.choices[0].message.content.trim()
+    };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+app.post("/api/ask", async (req, res) => {
+  const { prompt } = req.body;
+  if (!prompt) return res.status(400).json({ error: "prompt gerekli" });
+
+  const ai = await generateAnswer(prompt);
+
+  if (!ai.ok) {
+    return res.status(500).json({ error: "AI cevap veremedi", detail: ai.error });
+  }
+
+  res.json({ answer: ai.text });
+});
+
+app.listen(3000, () => {
+  console.log("Server çalışıyor: http://localhost:3000");
+});
