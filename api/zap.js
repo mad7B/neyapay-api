@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   const body = req.body || {};
   const prompt = body.prompt || "Merhaba";
 
-  // *************** GROQ (BİRİNCİ API) ***************
+  // *************** 1 - GROQ ***************
   try {
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -39,12 +39,11 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log("GROQ ERROR:", groqData);
   } catch (error) {
-    console.log("GROQ TRY ERROR:", error);
+    console.log("GROQ ERROR:", error);
   }
 
-  // *************** OPENROUTER (FALLBACK API) ***************
+  // *************** 2 - OPENROUTER FALLBACK (MODELSIZ) ***************
   try {
     const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -55,14 +54,11 @@ export default async function handler(req, res) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "google/gemini-1.5-flash",  // ✔ DOĞRU MODEL ADI
         messages: [{ role: "user", content: prompt }]
       })
     });
 
     const orData = await orResponse.json();
-
-    console.log("OPENROUTER RAW:", orData);
 
     if (orData?.choices?.[0]?.message?.content) {
       return res.status(200).json({
@@ -75,6 +71,7 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({ cevap: "Yanıt alınamadı (OR fallback)." });
+
   } catch (error2) {
     console.log("OPENROUTER ERROR:", error2);
     return res.status(200).json({
