@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     const g = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": "Bearer " + process.env.GROQ_KEY,
+        "Authorization": "Bearer gq-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",
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -25,30 +25,27 @@ export default async function handler(req, res) {
     });
 
     const data = await g.json();
-    if (g.ok) {
-      return res.status(200).json({ cevap: data.choices[0].message.content.trim() });
-    }
-  } catch (e) {}
-
-  // OpenRouter yedek
-  try {
-    const o = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": "Bearer " + process.env.OPENROUTER_KEY,
-        "HTTP-Referer": "https://neyapay.com.tr",
-        "X-Title": "Neyapay",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "google/gemini-flash-1.5",
-        messages: [{ role: "user", content: prompt || "Merhaba" }]
-      })
-    });
-
-    const data = await o.json();
     return res.status(200).json({ cevap: data.choices[0].message.content.trim() });
   } catch (e) {
-    return res.status(200).json({ cevap: "AI yoruldu, 5 saniye sonra dene 🚀" });
+    try {
+      const o = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer d7b186e020973b1a81beadfd1ed2721f8cf0250674b6e80430c9ecc7497f76ea",
+          "HTTP-Referer": "https://neyapay.com.tr",
+          "X-Title": "Neyapay",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "google/gemini-flash-1.5",
+          messages: [{ role: "user", content: prompt || "Merhaba" }]
+        })
+      });
+
+      const data = await o.json();
+      return res.status(200).json({ cevap: data.choices[0].message.content.trim() });
+    } catch (err) {
+      return res.status(200).json({ cevap: "AI biraz yoruldu, 5 saniye sonra dene 🚀" });
+    }
   }
 }
