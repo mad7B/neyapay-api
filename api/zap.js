@@ -38,12 +38,11 @@ export default async function handler(req, res) {
         cevap: groqData.choices[0].message.content.trim()
       });
     }
-
   } catch (error) {
     console.log("GROQ ERROR:", error);
   }
 
-  // *************** 2 - OPENROUTER FALLBACK (MODELSIZ) ***************
+  // *************** 2 - OPENROUTER FALLBACK (GARANTİ MODEL) ***************
   try {
     const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -54,6 +53,7 @@ export default async function handler(req, res) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
+        model: "anthropic/claude-3.6-sonnet",
         messages: [{ role: "user", content: prompt }]
       })
     });
@@ -67,7 +67,9 @@ export default async function handler(req, res) {
     }
 
     if (orData?.error?.message) {
-      return res.status(200).json({ cevap: "Hata: " + orData.error.message });
+      return res.status(200).json({
+        cevap: "Hata: " + orData.error.message
+      });
     }
 
     return res.status(200).json({ cevap: "Yanıt alınamadı (OR fallback)." });
