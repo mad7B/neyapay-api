@@ -11,14 +11,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ cevap: "Sadece POST isteği kabul edilir." });
   }
 
-  // ----------- EN ÖNEMLİ EK -----------
-  let body = req.body;
-  if (typeof body === "string") {
-    try { body = JSON.parse(body); } catch {}
-  }
-  //--------------------------------------
-
-  const prompt = body?.prompt || "Merhaba";
+  const body = req.body || {};
+  const prompt = body.prompt || "Merhaba";
 
   try {
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -43,34 +37,44 @@ export default async function handler(req, res) {
       });
     }
 
-    throw new Error("Groq hata");
+    console.log("GROQ ERROR:", groqData);
   } catch (error) {
-    try {
-      const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-          "HTTP-Referer": "https://neyapay.com.tr",
-          "X-Title": "Neyapay",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "google/gemini-flash-1.5",
-          messages: [{ role: "user", content: prompt }]
-        })
-      });
+    console.log("GROQ TRY ERROR:", error);
+  }
 
-      const orData = await orResponse.json();
+  // FALLBACK OPENROUTER
+  try {
+    const orResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
+        "HTTP-Referer": "https://neyapay.com.tr",
+        "X-Title": "Neyapay",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "google/gemini-flash-1.5",
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
 
-      return res.status(200).json({
-        cevap:
-          orData?.choices?.[0]?.message?.content?.trim() ||
-          "Yanıt alınamadı."
-      });
-    } catch (error2) {
-      return res.status(200).json({
-        cevap: "AI şu an meşgul, birazdan tekrar dene."
-      });
+    const orData = await orResponse.json();
+
+    console.log("OPENROUTER RAW:", orData);
+
+    if (orData?.choices?.[0]?.message?.content) {
+      return res.status(200).json({ cevap: orData.choices[0].message.content.trim() });
     }
+
+    if (orData?.error?.message) {
+      return res.status(200).json({ cevap: "Hata: " + orData.error.message });
+    }
+
+    return res.status(200).json({ cevap: "Yanıt alınamadı (OR fallback)." });
+  } catch (error2) {
+    console.log("OPENROUTER ERROR:", error2);
+    return res.status(200).json({
+      cevap: "AI şu an meşgul, birazdan tekrar dene."
+    });
   }
 }
