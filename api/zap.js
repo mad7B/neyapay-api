@@ -1,19 +1,20 @@
 export default async function handler(req, res) {
-  // CORS – zorunlu
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // CORS
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ cevap: 'Sadece POST' });
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ cevap: "Sadece POST" });
 
   const { prompt } = req.body || {};
 
   try {
+    // 1. GROQ API
     const g = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": "Bearer gq-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",
+        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -25,13 +26,21 @@ export default async function handler(req, res) {
     });
 
     const data = await g.json();
-    return res.status(200).json({ cevap: data.choices[0].message.content.trim() });
+
+    if (data?.choices?.[0]?.message?.content) {
+      return res.status(200).json({
+        cevap: data.choices[0].message.content.trim()
+      });
+    }
+
+    throw new Error("Groq failed");
   } catch (e) {
     try {
+      // 2. OPENROUTER fallback
       const o = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
-          "Authorization": "Bearer d7b186e020973b1a81beadfd1ed2721f8cf0250674b6e80430c9ecc7497f76ea",
+          "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
           "HTTP-Referer": "https://neyapay.com.tr",
           "X-Title": "Neyapay",
           "Content-Type": "application/json"
@@ -43,9 +52,15 @@ export default async function handler(req, res) {
       });
 
       const data = await o.json();
-      return res.status(200).json({ cevap: data.choices[0].message.content.trim() });
+
+      return res.status(200).json({
+        cevap: data?.choices?.[0]?.message?.content?.trim() ||
+               "Yanıt alınamadı ama API çalışıyor."
+      });
     } catch (err) {
-      return res.status(200).json({ cevap: "AI biraz yoruldu, 5 saniye sonra dene 🚀" });
+      return res.status(200).json({
+        cevap: "AI dinleniyor, 5 saniye sonra tekrar dene 🚀"
+      });
     }
   }
 }
